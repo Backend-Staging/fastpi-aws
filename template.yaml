@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FastAPI application deployed to AWS Lambda and API Gateway HTTP API
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: SQLAlchemy PostgreSQL connection URL
+  AllowedOrigin:
+    Type: String
+    Default: http://localhost:3000
+    Description: Exact frontend origin allowed by CORS
+  AuthSecretKey:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Secret used to sign JWTs
+  AuthAlgorithm:
+    Type: String
+    Default: HS256
+    AllowedValues:
+      - HS256
+      - HS384
+      - HS512
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    MemorySize: 512
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        DB_URL: !Ref DatabaseUrl
+        API_URL: !Ref AllowedOrigin
+        AUTH_SECRET_KEY: !Ref AuthSecretKey
+        AUTH_ALGORITHM: !Ref AuthAlgorithm
+        DEPLOYMENT_ENVIRONMENT: AWS
+
+Resources:
+  FastApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: api.main.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint
+    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  FunctionName:
+    Description: Lambda function name
+    Value: !Ref FastApiFunction
