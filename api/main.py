@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from mangum import Mangum
 import os
 from datetime import datetime, timezone
 import random
@@ -14,7 +15,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("API_URL")],  # The default React port
+    allow_origins=[os.getenv("API_URL")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,30 +25,25 @@ app.add_middleware(
 def populate_db():
     session = SessionLocal()
     try:
-        # Insert Users
         users = [User(username=f'user{i}', hashed_password=f'hash{i}', first_name=f'First{i}', last_name=f'Last{i}') for i in range(1, 31)]
         session.add_all(users)
         session.commit()
 
-        # Refresh each user instance if necessary
         for user in users:
             session.refresh(user)
 
-        # Insert Dogs, Posts, Comments, and Images
         for user in users:
             dogs = [Dog(name=f'Dog{j}', breed=f'Breed{j%5}', age=random.randint(1, 10), user_id=user.id) for j in range(1, 6)]
             session.add_all(dogs)
-            
+
             posts = [Post(content=f'Content{k}', timestamp=datetime.now(timezone.utc), user_id=user.id) for k in range(1, 11)]
             session.add_all(posts)
 
-            # Insert an Image record with image set to None
             image = Image(image=None, user_id=user.id)
             session.add(image)
-        
+
         session.commit()
 
-        # Collect all posts to randomly assign comments
         all_posts = session.query(Post).all()
         for user in users:
             selected_posts = random.sample(all_posts, 4)
@@ -71,3 +67,7 @@ app.include_router(posts.router)
 @app.get("/")
 async def health_check():
     return {"Healthy": 200}
+
+
+# AWS Lambda entry point. Mangum translates API Gateway HTTP API events to ASGI.
+handler = Mangum(app, lifespan="off")
